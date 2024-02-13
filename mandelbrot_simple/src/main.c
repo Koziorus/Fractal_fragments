@@ -8,31 +8,47 @@
 // f_parameter(argument) = argument^2 + parameter
 complex mandelbrot_func(complex argument, complex parameter)
 {
-    //return 
+    complex values[] = { argument, parameter };
+    return complex_arithmetic("(a * a) + b", values);
 }
 
-int does_function_converge(complex func_parameter)
+// returns 0 when the function converges and 1 otherwise
+int does_mandelbrot_converge(complex func_parameter)
 {
+    complex z = { 0, 0 };
+    for (int i = 0; i < CONVERGE_ITER_MAX; i++)
+    {
+        z = mandelbrot_func(z, func_parameter);
+        if (z.re > CONVERGE_VAL_MAX || z.im > CONVERGE_VAL_MAX)
+        {
+            return 1;
+        }
+    }
 
+    return 0;
+}
+
+void print_fractal(int (*does_function_converge)(complex), double xa, double xb, double ya, double yb, double spacing)
+{
+    FILE* file = fopen("mandelbrot_out.txt", "w");
+    
+    for (double y = yb; y >= ya; y -= spacing)
+    {
+        for (double x = xa; x <= xb; x += spacing)
+        {
+            complex parameter = { x, y };
+            char symbol = (does_function_converge(parameter) == 0 ? '#' : ' ');
+            fprintf(file, "%c ", symbol);
+        }
+        fprintf(file, "\n");
+    }
+
+    fclose(file);
 }
 
 int main()
 {
-    complex values[] = { {0, 1}, {0, 1} };
-
-    // for(int i = 0; i < 5; i++)
-    // {
-    //     char str[MAX_STR_LEN];
-    //     complex_to_str(str, values[i]);
-    //     printf("[%s]\n", str);
-    // }
-
-    complex number = complex_arithmetic("a * (b)", values);
-
-    char str[MAX_STR_LEN];
-    complex_to_str(str, number);
-    printf("[%s]\n", str);
-    
+    print_fractal(does_mandelbrot_converge, -3, 1.5, -1.5, 1.5, 0.01);
 
     return 0;
 }
