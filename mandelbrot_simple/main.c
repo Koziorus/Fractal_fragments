@@ -1,8 +1,11 @@
 #include <stdio.h>
 #include "complex.h"
+#include <pthread.h>
 
 #define CONVERGE_VAL_MAX 100000
 #define CONVERGE_ITER_MAX 100
+
+#define MAX_FRACTAL_DATA_SIZE 10000
 
 
 // f_parameter(argument) = argument^2 + parameter
@@ -28,9 +31,9 @@ int does_mandelbrot_converge(complex func_parameter)
     return 0;
 }
 
-void print_fractal(int (*does_function_converge)(complex), double xa, double xb, double ya, double yb, double spacing)
+int print_fractal(char* fractal_data, int (*does_function_converge)(complex), double xa, double xb, double ya, double yb, double spacing)
 {
-    FILE* file = fopen("mandelbrot_out.txt", "w");
+    int fractal_data_ptr = 0;
     
     for (double y = yb; y >= ya; y -= spacing)
     {
@@ -38,17 +41,31 @@ void print_fractal(int (*does_function_converge)(complex), double xa, double xb,
         {
             complex parameter = { x, y };
             char symbol = (does_function_converge(parameter) == 0 ? '#' : ' ');
-            fprintf(file, "%c ", symbol);
+			fractal_data[fractal_data_ptr++] = symbol;
+			fractal_data[fractal_data_ptr++] = ' ';
         }
-        fprintf(file, "\n");
+        fractal_data[fractal_data_ptr++] = '\n';
     }
-
-    fclose(file);
+	
+	return fractal_data_ptr;
 }
+
+typedef struct ThreadData
+{
+	int ID;
+} ThreadData;
+
+char* fractal_data[MAX_FRACTAL_DATA_SIZE];
 
 int main()
 {
-    print_fractal(does_mandelbrot_converge, -3, 1.5, -1.5, 1.5, 0.01);
-
-    return 0;
+	double xa = -3, xb = 1.5, ya = -1.5, yb = 1.5, spacing = 0.07;
+	
+	
+	
+    int fractal_data_size = print_fractal(fractal_data, does_mandelbrot_converge, xa, xb, ya, yb, spacing);
+	FILE* file = fopen("mandelbrot_out.txt", "wb");
+	fwrite(fractal_data, fractal_data_size, 1, file);
+	fclose(file);
 }
+
