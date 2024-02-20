@@ -7,7 +7,7 @@
 #define CONVERGE_VAL_MAX 100000
 #define CONVERGE_ITER_MAX 100
 
-#define MAX_FRACTAL_DATA_SIZE 10000000	
+#define MAX_FRACTAL_DATA_SIZE 1000000000	
 
 #define SCREEN_WIDTH 1000
 #define SCREEN_HEIGHT 700
@@ -16,12 +16,18 @@
 // f_parameter(argument) = argument^2 + parameter
 complex mandelbrot_func(complex argument, complex parameter)
 {
-    complex values[] = { argument, parameter };
-    return complex_arithmetic("(a * a) + b", values);
+	// old version
+    //complex values[] = { argument, parameter };
+	//return complex_arithmetic("(a * a) + b", values);
+	
+	complex result = {argument.re * argument.re - argument.im * argument.im + parameter.re,
+	2 * argument.re * argument.im + parameter.im};
+	
+	return result;
 }
 
 // returns 0 when the function converges and 1 otherwise
-int does_mandelbrot_converge(complex func_parameter)
+char does_mandelbrot_converge(complex func_parameter)
 {
     complex z = { 0, 0 };
     for (int i = 0; i < CONVERGE_ITER_MAX; i++)
@@ -41,7 +47,7 @@ typedef struct FractalData
 	double xa, xb, ya, yb, spacing;
 	int height, width;
 	int fractal_data_offset;
-	int (*does_function_converge)(complex);
+	char (*does_function_converge)(complex);
 	
 } FractalData;
 
@@ -51,29 +57,29 @@ pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
 void *compute_mandelbrot_part(void *ptr)
 {
-	FractalData fractal_data = *((FractalData*) ptr);
+	FractalData* fractal_data = (FractalData*) ptr;
 	
 	// printf("%d", fractal_data.fractal_data_offset);
 	
-	double y = fractal_data.yb;
-    for (int h = fractal_data.height - 1; h >= 0; h--)
+	double y = fractal_data->yb;
+    for (int h = fractal_data->height - 1; h >= 0; h--)
     {
-		double x = fractal_data.xa;
-        for (int w = 0; w < fractal_data.width; w++)
+		double x = fractal_data->xa;
+        for (int w = 0; w < fractal_data->width; w++)
         {
 			//Sleep(1);
             complex parameter = { x, y };
-            char symbol = fractal_data.does_function_converge(parameter);
-			fractal_image[fractal_data.fractal_data_offset] = symbol;
-			fractal_data.fractal_data_offset++;
+            char symbol = fractal_data->does_function_converge(parameter);
+			fractal_image[fractal_data->fractal_data_offset] = symbol;
+			fractal_data->fractal_data_offset++;
 			
-			x += fractal_data.spacing;
+			x += fractal_data->spacing;
 		}
 		
-		y -= fractal_data.spacing;
+		y -= fractal_data->spacing;
     }
 	
-	printf("%d\n", fractal_data.fractal_data_offset);
+	printf("%d\n", fractal_data->fractal_data_offset);
 	
 	// printf(" %d\n", fractal_data.fractal_data_offset);
 	
@@ -81,15 +87,8 @@ void *compute_mandelbrot_part(void *ptr)
 }
 
 
-int render_iter(SDL_Renderer* renderer, int image_width, int image_height)
+void render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 {
-	// SDL_Event event;
-	// SDL_WaitEvent(&event);
-	// if(event.type == SDL_QUIT)
-	// {
-		// return 1;
-	// }
-	
 	SDL_SetRenderDrawColor(renderer, 0x00, 0x00, 0x00, 0xFF);
 	SDL_RenderClear(renderer);
 	
@@ -104,7 +103,7 @@ int render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 			}
 			else
 			{
-				SDL_SetRenderDrawColor(renderer, symbol, symbol + 100, symbol + 200, 0xFF);
+				SDL_SetRenderDrawColor(renderer, symbol * 2, symbol * 3, symbol * 4, 0xFF);
 			}
 			
 			SDL_RenderDrawPoint(renderer, i, j);
@@ -112,8 +111,6 @@ int render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 	}
 	
 	SDL_RenderPresent(renderer);
-	
-	return 0;
 }
 
 void render_fractal(int image_width, int image_height)
@@ -137,7 +134,22 @@ void render_fractal(int image_width, int image_height)
 	// rendering loop
 	while(!quit)
 	{
-		quit = render_iter(renderer, image_width, image_height);
+		SDL_Event event;
+		while(SDL_PollEvent(&event))
+		{
+			switch(event.type)
+			{
+				case SDL_QUIT:
+					quit = 1;
+					break;
+				case SDL_MOUSEBUTTONDOWN:
+					int mouse_x, mouse_y;
+					SDL_GetMouseState(&mouse_x, &mouse_y);
+					break;
+			}
+		}
+		
+		render_iter(renderer, image_width, image_height);
 	}
 	
 	SDL_DestroyWindow(window);
@@ -147,10 +159,12 @@ void render_fractal(int image_width, int image_height)
 
 int main(int argc, char* argv[])
 {
-	double xa = -3, xb = 1.5, ya = -1.5, yb = 1.5, spacing = 0.005;
-	
 	// + 1 for a new line in each ine, + 1 for first symbol (from 0.0 to 10.0 a spacing of 2.6 can fit only 3 times, so there are symbols: symbol spacing symbol spacing symbol spacing symbol -> one more symbol than there are spacings)
 	// int image_width = ((int)((xb - xa) / spacing + 1)) * 2 + 1, image_height = (yb - ya) / spacing + 1;
+	
+	double xa = -3, xb = 1.5, ya = -1.5, yb = 1.5, spacing = 0.005;
+	
+	// double xa = 0, xb = 0.05, ya = 0.7, yb = 0.75, spacing = 0.0001;
 	
 	// image dimensions for rendering (without extra spaces and new lines
 	int image_width = (xb - xa) / spacing + 1, image_height = (yb - ya) / spacing + 1;
@@ -186,12 +200,14 @@ int main(int argc, char* argv[])
 		pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(fractal_data[i]));
 	}
 	
-	render_fractal(image_width, image_height);
+	
 	
 	for(int i = 0; i < threads_count; i++)
 	{
 		pthread_join(threads[i], NULL);
 	}
+	
+	render_fractal(image_width, image_height);
 	
     //int fractal_data_size = print_fractal(fractal_data, does_mandelbrot_converge, xa, xb, ya, yb, spacing);
 	
