@@ -154,7 +154,7 @@ void render_fractal(int image_width, int image_height)
 	
 	SDL_DestroyWindow(window);
 	SDL_DestroyRenderer(renderer);
-	SDL_Quit();
+	SDL_Quit(); 	
 }
 
 int main(int argc, char* argv[])

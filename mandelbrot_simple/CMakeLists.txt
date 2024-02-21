@@ -14,7 +14,6 @@ target_link_libraries(Mandelbrot_simple PUBLIC Complex)
 
 target_link_libraries(Mandelbrot_simple PUBLIC mingw32 SDL2main SDL2) 
 
-
 # cmake_minimum_required(VERSION 3.25)
 
 # project(mandelbrot_simple VERSION 0.1)
