@@ -16,10 +16,6 @@
 // f_parameter(argument) = argument^2 + parameter
 complex mandelbrot_func(complex argument, complex parameter)
 {
-	// old version
-    //complex values[] = { argument, parameter };
-	//return complex_arithmetic("(a * a) + b", values);
-	
 	complex result = {argument.re * argument.re - argument.im * argument.im + parameter.re,
 	2 * argument.re * argument.im + parameter.im};
 	
@@ -53,8 +49,6 @@ typedef struct FractalData
 
 char fractal_image[MAX_FRACTAL_DATA_SIZE];
 
-pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
-
 void *compute_mandelbrot_part(void *ptr)
 {
 	FractalData* fractal_data = (FractalData*) ptr;
@@ -85,7 +79,6 @@ void *compute_mandelbrot_part(void *ptr)
 	
 	return;
 }
-
 
 void render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 {
@@ -159,14 +152,11 @@ void render_fractal(int image_width, int image_height)
 
 int main(int argc, char* argv[])
 {
-	// + 1 for a new line in each ine, + 1 for first symbol (from 0.0 to 10.0 a spacing of 2.6 can fit only 3 times, so there are symbols: symbol spacing symbol spacing symbol spacing symbol -> one more symbol than there are spacings)
-	// int image_width = ((int)((xb - xa) / spacing + 1)) * 2 + 1, image_height = (yb - ya) / spacing + 1;
-	
 	double xa = -3, xb = 1.5, ya = -1.5, yb = 1.5, spacing = 0.005;
 	
 	// double xa = 0, xb = 0.05, ya = 0.7, yb = 0.75, spacing = 0.0001;
 	
-	// image dimensions for rendering (without extra spaces and new lines
+	// image dimensions for rendering
 	int image_width = (xb - xa) / spacing + 1, image_height = (yb - ya) / spacing + 1;
 	
 	printf("%dX%d\n", image_width, image_height);
@@ -200,32 +190,16 @@ int main(int argc, char* argv[])
 		pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(fractal_data[i]));
 	}
 	
-	
-	
 	for(int i = 0; i < threads_count; i++)
 	{
 		pthread_join(threads[i], NULL);
 	}
 	
 	render_fractal(image_width, image_height);
-	
-    //int fractal_data_size = print_fractal(fractal_data, does_mandelbrot_converge, xa, xb, ya, yb, spacing);
-	
-	//printf("fractal_data_size = (true) %d ?= %d (calculated)\n", fractal_data_size, image_width * image_height);
-	
-	int fractal_image_size = image_width * image_height;
-	// FILE* file = fopen("mandelbrot_out.txt", "wb");
-	
-	// fwrite(fractal_image, 1, fractal_image_size, file);
-	// fclose(file);
-		
-	//render_fractal(image_width + 1, image_height);	
-		
+
 	free(fractal_data);
 	
 	free(threads);
 	
 	return 0;
 }
-
-//TODO: seperate SDL version of the project into a different folder (so that there is a folder for ASCII rendering and another folder for SDL rendering)
