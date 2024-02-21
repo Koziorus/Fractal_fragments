@@ -32,52 +32,98 @@ char does_mandelbrot_converge(complex func_parameter)
         if (z.re > CONVERGE_VAL_MAX || z.im > CONVERGE_VAL_MAX)
         {
             return i;
-        }
+		}
     }
 
     return 0;
 }
 
-typedef struct FractalData
+typedef struct ThreadFractalData
 {
-	double xa, xb, ya, yb, spacing;
+	double x, y, spacing;
 	int height, width;
-	int fractal_data_offset;
+	int data_offset;
 	char (*does_function_converge)(complex);
 	
+} ThreadFractalData;
+
+typedef struct FractalData
+{
+	double x;
+	double y;
+	double spacing;
+	int image_width;
+	int image_height;
+	char (*does_function_converge)(complex);
+
 } FractalData;
 
 char fractal_image[MAX_FRACTAL_DATA_SIZE];
 
+pthread_mutex_t data_update_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t  data_update_cond = PTHREAD_COND_INITIALIZER;
+
+pthread_mutex_t stdout_synch_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 void *compute_mandelbrot_part(void *ptr)
 {
-	FractalData* fractal_data = (FractalData*) ptr;
-	
-	// printf("%d", fractal_data.fractal_data_offset);
-	
-	double y = fractal_data->yb;
-    for (int h = fractal_data->height - 1; h >= 0; h--)
-    {
-		double x = fractal_data->xa;
-        for (int w = 0; w < fractal_data->width; w++)
-        {
-			//Sleep(1);
-            complex parameter = { x, y };
-            char symbol = fractal_data->does_function_converge(parameter);
-			fractal_image[fractal_data->fractal_data_offset] = symbol;
-			fractal_data->fractal_data_offset++;
-			
-			x += fractal_data->spacing;
+	ThreadFractalData* thread_data = (ThreadFractalData*) ptr;
+
+	// printf("%f, %f\n", thread_data->x, thread_data->y);
+
+	// printf("%d ->\n", thread_data->data_offset);
+
+	while(1)
+	{
+		double y = thread_data->y;
+		for (int h = thread_data->height - 1; h >= 0; h--)
+		{
+			double x = thread_data->x;
+			for (int w = 0; w < thread_data->width; w++)
+			{
+				// Sleep(5);
+				complex parameter = { x, y };
+				char symbol = thread_data->does_function_converge(parameter);
+				fractal_image[thread_data->data_offset] = symbol;
+				thread_data->data_offset++;
+				
+				x += thread_data->spacing;
+			}
+
+			y -= thread_data->spacing;
 		}
+
+		pthread_mutex_lock(&data_update_mutex);
+
+		pthread_cond_wait(&data_update_cond, &data_update_mutex);
+
+		pthread_mutex_unlock(&data_update_mutex);
+	}
+
+	// printf("%d\n", thread_data->data_offset);
+	
+	return NULL;
+}
+
+void set_threads_data(ThreadFractalData *thread_data_arr, int threads_count, FractalData fractal)
+{
+	for(int i = 0; i < threads_count; i++)
+	{	
+		int regular_height = ceil(fractal.image_height / (double)threads_count);
+		thread_data_arr[i] = (ThreadFractalData){	.x = fractal.x,
+													.y = fractal.y - ((fractal.image_height * i * fractal.spacing) / threads_count),
+													.width = fractal.image_width,
+													.height = regular_height,
+													.spacing = fractal.spacing, 
+													.data_offset = regular_height * fractal.image_width * (threads_count - (i+1)),
+													.does_function_converge = fractal.does_function_converge};
 		
-		y -= fractal_data->spacing;
-    }
-	
-	printf("%d\n", fractal_data->fractal_data_offset);
-	
-	// printf(" %d\n", fractal_data.fractal_data_offset);
-	
-	return;
+		// the shortest part (for example: when dividing 599 into 3 parts: 200 200 199)				
+		if(i == 0)
+		{
+			thread_data_arr[i].height = fractal.image_height - (threads_count - 1) * regular_height;
+		}
+	}
 }
 
 void render_iter(SDL_Renderer* renderer, int image_width, int image_height)
@@ -96,6 +142,7 @@ void render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 			}
 			else
 			{
+				// SDL_SetRenderDrawColor(renderer, 0xFF, 0xFF, 0xFF, 0xFF);
 				SDL_SetRenderDrawColor(renderer, symbol * 2, symbol * 3, symbol * 4, 0xFF);
 			}
 			
@@ -106,7 +153,8 @@ void render_iter(SDL_Renderer* renderer, int image_width, int image_height)
 	SDL_RenderPresent(renderer);
 }
 
-void render_fractal(int image_width, int image_height)
+
+void render_fractal(int image_width, int image_height, FractalData fractal, ThreadFractalData *thread_data_arr, int threads_count)
 {
 	SDL_Init(SDL_INIT_VIDEO);
 	
@@ -120,8 +168,12 @@ void render_fractal(int image_width, int image_height)
 	SDL_Renderer *renderer = SDL_CreateRenderer(window, 
 												-1,
 												SDL_RENDERER_ACCELERATED);
-												
-	SDL_RenderSetScale(renderer, (double)SCREEN_WIDTH/image_width, (double)SCREEN_WIDTH/image_width);
+	
+	double render_scale_factor =  (double)SCREEN_WIDTH/image_width;
+	SDL_RenderSetScale(renderer, render_scale_factor, render_scale_factor);
+	
+	double zoom_scale_factor = 2; // says how much it zooms 
+
 	int quit = 0;
 	
 	// rendering loop
@@ -138,6 +190,18 @@ void render_fractal(int image_width, int image_height)
 				case SDL_MOUSEBUTTONDOWN:
 					int mouse_x, mouse_y;
 					SDL_GetMouseState(&mouse_x, &mouse_y);
+
+					pthread_mutex_lock(&data_update_mutex);
+					
+					fractal.x = fractal.x + ((mouse_x - (SCREEN_WIDTH / (double) zoom_scale_factor) / 2.0) * fractal.spacing) / render_scale_factor;
+					fractal.y = fractal.y - ((mouse_y - (SCREEN_HEIGHT / (double) zoom_scale_factor) / 2.0) * fractal.spacing) / render_scale_factor;
+					fractal.spacing = fractal.spacing / zoom_scale_factor;
+					
+					set_threads_data(thread_data_arr, threads_count, fractal);
+					
+					pthread_cond_broadcast(&data_update_cond);
+					pthread_mutex_unlock(&data_update_mutex);
+
 					break;
 			}
 		}
@@ -152,53 +216,36 @@ void render_fractal(int image_width, int image_height)
 
 int main(int argc, char* argv[])
 {
-	double xa = -3, xb = 1.5, ya = -1.5, yb = 1.5, spacing = 0.005;
+	FractalData mandelbrot = {	.x = -3,
+								.y = 1.5,
+								.spacing = 0.005,
+								.image_width = 1000,
+								.image_height = 600,
+								.does_function_converge = does_mandelbrot_converge};
+
+	printf("%dX%d\n", mandelbrot.image_width, mandelbrot.image_height);
 	
-	// double xa = 0, xb = 0.05, ya = 0.7, yb = 0.75, spacing = 0.0001;
-	
-	// image dimensions for rendering
-	int image_width = (xb - xa) / spacing + 1, image_height = (yb - ya) / spacing + 1;
-	
-	printf("%dX%d\n", image_width, image_height);
-	
-	int threads_count = 8;
+	int threads_count = 1;
 	pthread_t *threads = malloc(sizeof(pthread_t) * threads_count);
 	
-	FractalData *fractal_data = malloc(sizeof(FractalData) * threads_count);
-	
+	ThreadFractalData *thread_data_arr = malloc(sizeof(ThreadFractalData) * threads_count);
+	set_threads_data(thread_data_arr, threads_count, mandelbrot);
+
 	for(int i = 0; i < threads_count; i++)
 	{	
-		int regular_height = ceil(image_height / (double)threads_count);
-		fractal_data[i] = (FractalData){.xa = xa,
-										.xb = xb,
-										.ya = ya + ((yb - ya) * i) / threads_count,
-										.yb = ya + ((yb - ya) * i + (yb - ya)) / threads_count,
-										.width = image_width,
-										.height = regular_height,
-										.spacing = spacing, 
-										.fractal_data_offset = regular_height * image_width * (threads_count - (i+1)),
-										.does_function_converge = does_mandelbrot_converge};
-		
-		// the shortest part (for example: when dividing 599 into 3 parts: 200 200 199)				
-		if(i == 0)
-		{
-			fractal_data[i].height = image_height - (threads_count - 1) * regular_height;
-		}
-										
-		printf("%d %d\n", fractal_data[i].fractal_data_offset, fractal_data[i].height);
-
-		pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(fractal_data[i]));
+		pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(thread_data_arr[i]));
 	}
+
+	//pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(thread_data_arr[i]));
+
+	render_fractal(mandelbrot.image_width, mandelbrot.image_height, mandelbrot, thread_data_arr, threads_count);
 	
 	for(int i = 0; i < threads_count; i++)
 	{
 		pthread_join(threads[i], NULL);
 	}
-	
-	render_fractal(image_width, image_height);
 
-	free(fractal_data);
-	
+	free(thread_data_arr);
 	free(threads);
 	
 	return 0;
