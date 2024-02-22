@@ -6,7 +6,7 @@
 
 typedef struct
 {
-    double re, im;
+    long double re, im;
 } complex;
 
 void complex_to_str(char* dest_str, complex number);

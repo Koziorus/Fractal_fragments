@@ -8,8 +8,8 @@ void complex_to_str(char* dest_str, complex number)
 
 complex complex_mult(complex a, complex b)
 {
-    double out_re = a.re * b.re - (a.im * b.im);
-    double out_im = a.im * b.re + a.re * b.im;
+    long double out_re = a.re * b.re - (a.im * b.im);
+    long double out_im = a.im * b.re + a.re * b.im;
 
     complex out;
     out.re = out_re;

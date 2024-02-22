@@ -213,7 +213,6 @@ void render_fractal(int image_width, int image_height, FractalData fractal, Thre
 
 int main(int argc, char* argv[])
 {
-	
 	double resolution = 1; // 1 means that one screen pixel has one sample from the fractal, 0.25 means that 4 screen pixels has the same one sample from the fractal
 
 	FractalData mandelbrot = {	.x = -2.5,
