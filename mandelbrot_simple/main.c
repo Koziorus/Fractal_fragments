@@ -7,11 +7,10 @@
 #define CONVERGE_VAL_MAX 100000
 #define CONVERGE_ITER_MAX 100
 
-#define MAX_FRACTAL_DATA_SIZE 1000000000	
+#define MAX_FRACTAL_DATA_SIZE 10000000	
 
-#define SCREEN_WIDTH 1000
-#define SCREEN_HEIGHT 700
-
+#define SCREEN_WIDTH 960
+#define SCREEN_HEIGHT 720
 
 // f_parameter(argument) = argument^2 + parameter
 complex mandelbrot_func(complex argument, complex parameter)
@@ -192,17 +191,40 @@ void render_fractal(int image_width, int image_height, FractalData fractal, Thre
 					SDL_GetMouseState(&mouse_x, &mouse_y);
 
 					pthread_mutex_lock(&data_update_mutex);
+
+					double zoom_factor = (event.button.button == SDL_BUTTON_LEFT ? zoom_scale_factor : 1 / zoom_scale_factor);
 					
-					fractal.x = fractal.x + ((mouse_x - (SCREEN_WIDTH / (double) zoom_scale_factor) / 2.0) * fractal.spacing) / render_scale_factor;
-					fractal.y = fractal.y - ((mouse_y - (SCREEN_HEIGHT / (double) zoom_scale_factor) / 2.0) * fractal.spacing) / render_scale_factor;
-					fractal.spacing = fractal.spacing / zoom_scale_factor;
-					
+					fractal.x = fractal.x + ((mouse_x - (SCREEN_WIDTH / (double) zoom_factor) / 2.0) * fractal.spacing) / render_scale_factor;
+					fractal.y = fractal.y - ((mouse_y - (SCREEN_HEIGHT / (double) zoom_factor) / 2.0) * fractal.spacing) / render_scale_factor;
+					fractal.spacing = fractal.spacing / zoom_factor;
+
 					set_threads_data(thread_data_arr, threads_count, fractal);
 					
 					pthread_cond_broadcast(&data_update_cond);
 					pthread_mutex_unlock(&data_update_mutex);
 
 					break;
+				case SDL_KEYDOWN:
+					pthread_mutex_lock(&data_update_mutex);
+
+					switch(event.key.keysym.sym)
+					{
+						case SDLK_UP: 
+							fractal.spacing /= 2;		
+							break;
+						case SDLK_DOWN:
+							fractal.spacing *= 2;
+							break;
+					}
+
+					printf("%f\n", fractal.spacing);
+
+					set_threads_data(thread_data_arr, threads_count, fractal);
+					
+					pthread_cond_broadcast(&data_update_cond);
+					pthread_mutex_unlock(&data_update_mutex);
+
+				break;
 			}
 		}
 		
@@ -214,13 +236,26 @@ void render_fractal(int image_width, int image_height, FractalData fractal, Thre
 	SDL_Quit(); 	
 }
 
+double pow_2_inv(double x)
+{
+	double y = 1;
+	for(int i = 0; i < x; i++)
+	{
+		y /= 2.0;
+	}
+
+	return y;
+}
+
 int main(int argc, char* argv[])
 {
-	FractalData mandelbrot = {	.x = -3,
+	double resolution = 1; // 1 means that one screen pixel has one sample from the fractal, 0.25 means that 4 screen pixels has the same one sample from the fractal
+
+	FractalData mandelbrot = {	.x = -2.5,
 								.y = 1.5,
-								.spacing = 0.005,
-								.image_width = 1000,
-								.image_height = 600,
+								.spacing = 0.004 / resolution,
+								.image_width = SCREEN_WIDTH * resolution,
+								.image_height = SCREEN_HEIGHT * resolution,
 								.does_function_converge = does_mandelbrot_converge};
 
 	printf("%dX%d\n", mandelbrot.image_width, mandelbrot.image_height);
@@ -235,8 +270,6 @@ int main(int argc, char* argv[])
 	{	
 		pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(thread_data_arr[i]));
 	}
-
-	//pthread_create(&(threads[i]), NULL, compute_mandelbrot_part, (void*) &(thread_data_arr[i]));
 
 	render_fractal(mandelbrot.image_width, mandelbrot.image_height, mandelbrot, thread_data_arr, threads_count);
 	
