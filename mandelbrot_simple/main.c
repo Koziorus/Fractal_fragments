@@ -12,6 +12,9 @@
 #define SCREEN_WIDTH 960
 #define SCREEN_HEIGHT 720
 
+// #define SCREEN_WIDTH 2560
+// #define SCREEN_HEIGHT 1440
+
 // f_parameter(argument) = argument^2 + parameter
 complex mandelbrot_func(complex argument, complex parameter)
 {
@@ -21,7 +24,6 @@ complex mandelbrot_func(complex argument, complex parameter)
 	return result;
 }
 
-// returns 0 when the function converges and 1 otherwise
 char does_mandelbrot_converge(complex func_parameter)
 {
     complex z = { 0, 0 };
@@ -68,9 +70,7 @@ void *compute_mandelbrot_part(void *ptr)
 {
 	ThreadFractalData* thread_data = (ThreadFractalData*) ptr;
 
-	// printf("%f, %f\n", thread_data->x, thread_data->y);
-
-	// printf("%d ->\n", thread_data->data_offset);
+	printf("%f, %d\n", thread_data->y, thread_data->data_offset);
 
 	while(1)
 	{
@@ -98,8 +98,6 @@ void *compute_mandelbrot_part(void *ptr)
 
 		pthread_mutex_unlock(&data_update_mutex);
 	}
-
-	// printf("%d\n", thread_data->data_offset);
 	
 	return NULL;
 }
@@ -110,7 +108,7 @@ void set_threads_data(ThreadFractalData *thread_data_arr, int threads_count, Fra
 	{	
 		int regular_height = ceil(fractal.image_height / (double)threads_count);
 		thread_data_arr[i] = (ThreadFractalData){	.x = fractal.x,
-													.y = fractal.y - ((fractal.image_height * i * fractal.spacing) / threads_count),
+													.y = fractal.y - ((fractal.image_height * (threads_count - (i+1)) * fractal.spacing) / threads_count),
 													.width = fractal.image_width,
 													.height = regular_height,
 													.spacing = fractal.spacing, 
@@ -204,27 +202,6 @@ void render_fractal(int image_width, int image_height, FractalData fractal, Thre
 					pthread_mutex_unlock(&data_update_mutex);
 
 					break;
-				case SDL_KEYDOWN:
-					pthread_mutex_lock(&data_update_mutex);
-
-					switch(event.key.keysym.sym)
-					{
-						case SDLK_UP: 
-							fractal.spacing /= 2;		
-							break;
-						case SDLK_DOWN:
-							fractal.spacing *= 2;
-							break;
-					}
-
-					printf("%f\n", fractal.spacing);
-
-					set_threads_data(thread_data_arr, threads_count, fractal);
-					
-					pthread_cond_broadcast(&data_update_cond);
-					pthread_mutex_unlock(&data_update_mutex);
-
-				break;
 			}
 		}
 		
@@ -234,17 +211,6 @@ void render_fractal(int image_width, int image_height, FractalData fractal, Thre
 	SDL_DestroyWindow(window);
 	SDL_DestroyRenderer(renderer);
 	SDL_Quit(); 	
-}
-
-double pow_2_inv(double x)
-{
-	double y = 1;
-	for(int i = 0; i < x; i++)
-	{
-		y /= 2.0;
-	}
-
-	return y;
 }
 
 int main(int argc, char* argv[])
@@ -260,7 +226,7 @@ int main(int argc, char* argv[])
 
 	printf("%dX%d\n", mandelbrot.image_width, mandelbrot.image_height);
 	
-	int threads_count = 1;
+	int threads_count = 6;
 	pthread_t *threads = malloc(sizeof(pthread_t) * threads_count);
 	
 	ThreadFractalData *thread_data_arr = malloc(sizeof(ThreadFractalData) * threads_count);
